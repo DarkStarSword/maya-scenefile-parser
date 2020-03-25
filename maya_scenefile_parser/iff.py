@@ -130,6 +130,14 @@ class IffParser(object):
         else:
             return ""
 
+    def _read_remaining_chunk_data(self, chunk=None):
+        chunk = chunk or self.__current_chunk
+        offset = self._get_offset() - chunk.data_offset
+        if chunk and offset >= 0 and offset < chunk.data_length:
+            return self.__stream.read(chunk.data_length - offset)
+        else:
+            return ""
+
     def _read_next_chunk(self):
         if self._is_past_the_end():
             return None

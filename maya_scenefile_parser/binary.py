@@ -43,6 +43,7 @@ STR_ = common.be_word4("STR ")
 FLT2 = common.be_word4("FLT2")
 CMPD = common.be_word4("CMPD")
 MESH = common.be_word4("MESH")
+NRBC = common.be_word4("NRBC")
 
 
 MAYA_BINARY_32 = iff.IffFormat(
@@ -178,6 +179,49 @@ class MayaBinaryParser(iff.IffParser, common.MayaParserBase):
         dst = common.read_null_terminated(self.stream)
         self.on_connect_attr(src, dst)
 
+    def _dump_chunk(self, chunk, hexdump=True, remaining=False):
+        import codecs
+        offset = self._get_offset()
+        if remaining:
+            data = self._read_remaining_chunk_data(chunk)
+        else:
+            data = self._read_chunk_data(chunk)
+        self._set_offset(offset)
+
+        def _hexdump(buf, start=0, width=16, indent=2):
+            # Python 2 version. For Python 3 version see
+            # https://github.com/DarkStarSword/3d-fixes/blob/master/unity_asset_extractor.py#L13
+            a = ''
+            ret = ''
+            for i, b in enumerate(buf):
+                if i % width == 0:
+                    if i:
+                        ret += ' | %s |\n' % a
+                    ret += '%s%08x: ' % (' ' * indent, start + i)
+                    a = ''
+                elif i and i % 4 == 0:
+                    ret += ' '
+                if ord(b) >= ord(' ') and ord(b) <= ord('~'):
+                    a += b
+                else:
+                    a += '.'
+                ret += '%02X' % ord(b)
+            if a:
+                rem = width - (i % width) - 1
+                ret += ' ' * (rem*2)
+                ret += ' ' * (rem//4 + 1)
+                ret += '| %s%s |\n' % (a, ' ' * rem)
+            return ret
+
+        print('CHUNK \"%s\"' % struct.pack('>I', chunk.typeid))
+        start = 0
+        if remaining:
+            start = offset - chunk.data_offset
+            print('        ...:')
+        if hexdump:
+            #print(codecs.encode(data, 'hex'))
+            print _hexdump(data, start=start, indent=3),
+
     def _parse_node(self, mtypeid):
         for chunk in self._iter_chunks():
             # Create node
@@ -190,21 +234,24 @@ class MayaBinaryParser(iff.IffParser, common.MayaParserBase):
 
             # Select the current node
             elif chunk.typeid == SLCT:
+                #self._dump_chunk(chunk)
                 pass
 
             # Dynamic attribute
             elif chunk.typeid == ATTR:
+                #self._dump_chunk(chunk)
                 pass
 
             # Flags
             elif chunk.typeid == FLGS:
+                #self._dump_chunk(chunk)
                 pass
 
             # Set attribute
             else:
-                self._parse_attribute(chunk.typeid)
+                self._parse_attribute(chunk.typeid, chunk)
 
-    def _parse_attribute(self, mtypeid):
+    def _parse_attribute(self, mtypeid, chunk):
         # TODO Support more primitive types
         if mtypeid == STR_:
             self._parse_string_attribute()
@@ -212,7 +259,10 @@ class MayaBinaryParser(iff.IffParser, common.MayaParserBase):
             self._parse_double_attribute()
         elif mtypeid == DBL3:
             self._parse_double3_attribute()
+        elif mtypeid == NRBC:
+            self._parse_nurbs_curve_attribute(chunk)
         else:
+            self._dump_chunk(chunk, hexdump=False)
             self._parse_mpxdata_attribute(mtypeid)
 
     def _parse_attribute_info(self):
@@ -239,7 +289,54 @@ class MayaBinaryParser(iff.IffParser, common.MayaParserBase):
                               self.stream.read(24 * count))
         self.on_set_attr(attr_name, value, type="double3")
 
-    def _parse_mpxdata_attribute(self, tyepid):
+    def _parse_nurbs_curve_attribute(self, chunk):
+        #self._dump_chunk(chunk)
+        attr_name, count = self._parse_attribute_info()
+
+        # Making heavy use of asserts to catch any variants I haven't seen so I can
+        # make sure they are parsed correctly rather than risking passing garbage out
+        assert(count == 1)
+
+        def struct_read(format):
+            return struct.unpack(format, self.stream.read(struct.calcsize(format)))
+
+        # "degree" and "order" are guesses
+        u0, degree, u2, u3, order, u5, u6, u7 = struct_read(">2I5s4If")
+        print('            Degree?: %i' % degree)
+        print('             Order?: %i' % order)
+
+        assert u0 == 1, u0
+        assert degree >= 1, degree
+        assert u2 == '\0'*5, u2 # 5 bytes messes up 32bit alignment here
+        assert u3 == 3, u3
+        assert order == degree + 1, (order, degree)
+        assert u5 == 0, u5
+        assert u6 == 0, u6
+        assert u7 == 1.875, u7
+
+        #self._dump_chunk(chunk, remaining=True)
+
+        for i in range(degree - 1):
+            u8, u9 = struct_read(">2I")
+            print('    not... knot? %2i: %08x' % (i, u9))
+            assert u8 == 0, u8
+        u8a, u9a = struct_read(">2I")
+        assert u8a == 0, u8a
+        assert u9a == order, u9a
+
+        for i in range(order):
+            x, u10, y, u11, z, u12 = struct_read(">fIfIfI")
+            print('   control point %2i: %9f %9f %9f' % (i, x, y, z))
+            print( '                      %08x  %08x  %08x' % (u10, u11, u12)) # ???
+            # Noticed a few cases where u11 appears to increment by one between
+            # points & curves. Possibly an ID, but other times it remains fixed
+            # for several points or changes randomly.
+
+        assert(self._get_offset() == chunk.data_offset + chunk.data_length)
+
+        self.on_set_attr(attr_name, None, type="NRBC")
+
+    def _parse_mpxdata_attribute(self, typeid):
         # TODO
         pass
 

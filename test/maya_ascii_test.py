@@ -1,5 +1,9 @@
+#!/usr/bin/env python
+
 import sys
-from sansapp.maya import MayaAsciiParser
+sys.path.append('..')
+#from sansapp.maya import MayaAsciiParser
+from maya_scenefile_parser import MayaAsciiParser
 
 
 class TestMayaAsciiParser(MayaAsciiParser):
