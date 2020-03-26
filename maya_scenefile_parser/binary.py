@@ -3,46 +3,55 @@ import struct
 
 from . import common, iff
 
+try:
+    import bpy as blender
+except:
+    blender = None
+
+def pr_debug(msg, *args, **kwargs):
+    if not blender:
+        print(msg, *args, **kwargs)
 
 # IFF chunk type IDs
-FOR4 = common.be_word4("FOR4")
-LIS4 = common.be_word4("LIS4")
+FOR4 = common.be_word4(b"FOR4")
+LIS4 = common.be_word4(b"LIS4")
 # 64 bits
-FOR8 = common.be_word4("FOR8")
-LIS8 = common.be_word4("LIS8")
+FOR8 = common.be_word4(b"FOR8")
+LIS8 = common.be_word4(b"LIS8")
 
 # General
-MAYA = common.be_word4("Maya")
+MAYA = common.be_word4(b"Maya")
 
 # File referencing
-FREF = common.be_word4("FREF")
-FRDI = common.be_word4("FRDI")
+FREF = common.be_word4(b"FREF")
+FRDI = common.be_word4(b"FRDI")
 
 # Header fields
-HEAD = common.be_word4("HEAD")
-VERS = common.be_word4("VERS")
-PLUG = common.be_word4("PLUG")
-FINF = common.be_word4("FINF")
-AUNI = common.be_word4("AUNI")
-LUNI = common.be_word4("LUNI")
-TUNI = common.be_word4("TUNI")
+HEAD = common.be_word4(b"HEAD")
+VERS = common.be_word4(b"VERS")
+PLUG = common.be_word4(b"PLUG")
+FINF = common.be_word4(b"FINF")
+AUNI = common.be_word4(b"AUNI")
+LUNI = common.be_word4(b"LUNI")
+TUNI = common.be_word4(b"TUNI")
 
 # Node creation
-CREA = common.be_word4("CREA")
-SLCT = common.be_word4("SLCT")
-ATTR = common.be_word4("ATTR")
+CREA = common.be_word4(b"CREA")
+SLCT = common.be_word4(b"SLCT")
+ATTR = common.be_word4(b"ATTR")
 
-CONS = common.be_word4("CONS")
-CONN = common.be_word4("CONN")
+CONS = common.be_word4(b"CONS")
+CONN = common.be_word4(b"CONN")
 
 # Data types
-FLGS = common.be_word4("FLGS")
-DBLE = common.be_word4("DBLE")
-DBL3 = common.be_word4("DBL3")
-STR_ = common.be_word4("STR ")
-FLT2 = common.be_word4("FLT2")
-CMPD = common.be_word4("CMPD")
-MESH = common.be_word4("MESH")
+FLGS = common.be_word4(b"FLGS")
+DBLE = common.be_word4(b"DBLE")
+DBL3 = common.be_word4(b"DBL3")
+STR_ = common.be_word4(b"STR ")
+FLT2 = common.be_word4(b"FLT2")
+CMPD = common.be_word4(b"CMPD")
+MESH = common.be_word4(b"MESH")
+NRBC = common.be_word4(b"NRBC")
 
 
 MAYA_BINARY_32 = iff.IffFormat(
@@ -64,6 +73,12 @@ MAYA_BINARY_64 = iff.IffFormat(
 class MayaBinaryError(RuntimeError):
     pass
 
+class NurbsCurve(object):
+    def __init__(self):
+        self.control_points = []
+        self.knot_vector = []
+        self.degree = 3
+        self.dimensions = 3
 
 class MayaBinaryParser(iff.IffParser, common.MayaParserBase):
     def __init__(self, stream):
@@ -71,9 +86,9 @@ class MayaBinaryParser(iff.IffParser, common.MayaParserBase):
         # Maya 2014+ files begin with a FOR8 block, indicating a 64-bit format.
         magic_number = stream.read(4)
         stream.seek(0)
-        if magic_number == "FOR4":
+        if magic_number == b"FOR4":
             format = MAYA_BINARY_32
-        elif magic_number == "FOR8":
+        elif magic_number == b"FOR8":
             format = MAYA_BINARY_64
         else:
             raise MayaBinaryError("Bad magic number")
@@ -124,7 +139,7 @@ class MayaBinaryParser(iff.IffParser, common.MayaParserBase):
         for chunk in self._iter_chunks():
             # requires (maya)
             if chunk.typeid == VERS:
-                self.on_requires_maya(self._read_chunk_data(chunk))
+                self.on_requires_maya(self._read_chunk_data(chunk).decode('ascii'))
             
             # requires (plugin)
             elif chunk.typeid == PLUG:
@@ -143,15 +158,15 @@ class MayaBinaryParser(iff.IffParser, common.MayaParserBase):
 
             # currentUnit (angle)
             elif chunk.typeid == AUNI:
-                angle_unit = self._read_chunk_data(chunk)
+                angle_unit = self._read_chunk_data(chunk).decode('ascii')
 
             # currentUnit (linear)
             elif chunk.typeid == LUNI:
-                linear_unit = self._read_chunk_data(chunk)
+                linear_unit = self._read_chunk_data(chunk).decode('ascii')
 
             # currentUnit (time)
             elif chunk.typeid == TUNI:
-                time_unit = self._read_chunk_data(chunk)
+                time_unit = self._read_chunk_data(chunk).decode('ascii')
 
             # Got all three units
             if angle_unit and linear_unit and time_unit:
@@ -178,33 +193,80 @@ class MayaBinaryParser(iff.IffParser, common.MayaParserBase):
         dst = common.read_null_terminated(self.stream)
         self.on_connect_attr(src, dst)
 
+    def _dump_chunk(self, chunk, hexdump=True, remaining=False):
+        import codecs
+        offset = self._get_offset()
+        if remaining:
+            data = self._read_remaining_chunk_data(chunk)
+        else:
+            data = self._read_chunk_data(chunk)
+        self._set_offset(offset)
+
+        def _hexdump(buf, start=0, width=16, indent=2):
+            a = ''
+            ret = ''
+            for i, b in enumerate(buf):
+                if i % width == 0:
+                    if i:
+                        ret += ' | %s |\n' % a
+                    ret += '%s%08x: ' % (' ' * indent, start + i)
+                    a = ''
+                elif i and i % 4 == 0:
+                    ret += ' '
+                if b >= ord(' ') and b <= ord('~'):
+                    a += chr(b)
+                else:
+                    a += '.'
+                ret += '%02X' % b
+            if a:
+                rem = width - (i % width) - 1
+                ret += ' ' * (rem*2)
+                ret += ' ' * (rem//4 + 1)
+                ret += '| %s%s |\n' % (a, ' ' * rem)
+            return ret
+
+        pr_debug('CHUNK \"%s\"' % struct.pack('>I', chunk.typeid).decode('ascii'))
+        start = 0
+        if remaining:
+            start = offset - chunk.data_offset
+            pr_debug('        ...:')
+        if hexdump:
+            #pr_debug(codecs.encode(data, 'hex'))
+            pr_debug(_hexdump(data, start=start, indent=3), end='')
+
     def _parse_node(self, mtypeid):
         for chunk in self._iter_chunks():
             # Create node
             if chunk.typeid == CREA:
                 typename = self.__mtypeid_to_typename.get(mtypeid, "unknown")
-                name_parts = self._read_chunk_data(chunk)[1:-1].split("\0")
-                name = name_parts[0]
-                parent_name = name_parts[1] if len(name_parts) > 1 else None
+                name_parts = self._read_chunk_data(chunk)[1:-1].split(b"\0")
+                name = name_parts[0].decode('ascii')
+                try:
+                    parent_name = name_parts[1].decode('ascii') if len(name_parts) > 1 else None
+                except UnicodeDecodeError: # Some parent names are garbage
+                    parent_name = name_parts[1]
                 self.on_create_node(typename, name, parent=parent_name)
 
             # Select the current node
             elif chunk.typeid == SLCT:
+                #self._dump_chunk(chunk)
                 pass
 
             # Dynamic attribute
             elif chunk.typeid == ATTR:
+                #self._dump_chunk(chunk)
                 pass
 
             # Flags
             elif chunk.typeid == FLGS:
+                #self._dump_chunk(chunk)
                 pass
 
             # Set attribute
             else:
-                self._parse_attribute(chunk.typeid)
+                self._parse_attribute(chunk.typeid, chunk)
 
-    def _parse_attribute(self, mtypeid):
+    def _parse_attribute(self, mtypeid, chunk):
         # TODO Support more primitive types
         if mtypeid == STR_:
             self._parse_string_attribute()
@@ -212,7 +274,10 @@ class MayaBinaryParser(iff.IffParser, common.MayaParserBase):
             self._parse_double_attribute()
         elif mtypeid == DBL3:
             self._parse_double3_attribute()
+        elif mtypeid == NRBC:
+            self._parse_nurbs_curve_attribute(chunk)
         else:
+            self._dump_chunk(chunk, hexdump=False)
             self._parse_mpxdata_attribute(mtypeid)
 
     def _parse_attribute_info(self):
@@ -239,15 +304,82 @@ class MayaBinaryParser(iff.IffParser, common.MayaParserBase):
                               self.stream.read(24 * count))
         self.on_set_attr(attr_name, value, type="double3")
 
-    def _parse_mpxdata_attribute(self, tyepid):
+    def _parse_nurbs_curve_attribute(self, chunk):
+        self._dump_chunk(chunk)
+        attr_name, count = self._parse_attribute_info()
+        assert(attr_name == 'cc')
+        assert(count == 1)
+
+        curve = NurbsCurve()
+
+        def struct_read(format):
+            return struct.unpack(format, self.stream.read(struct.calcsize(format)))
+
+        # Names are educated guesses, not certainties. "u" means unidentified.
+        curve.degree, spans, u2, curve.dimensions, knots = struct_read(">2I5s2I")
+        pr_debug('             Degree: %i' % curve.degree)
+        pr_debug('             Spans?: %i' % spans) # Spans or "edit points" maybe?
+        pr_debug('        Dimensions?: %i' % curve.dimensions)
+        pr_debug('              Knots: %i' % knots)
+        _points = knots - curve.degree + 1 # We will read this from the buffer "for real" later
+        pr_debug('     Control Points: %i' % _points)
+
+        # NOTE discrepancy:
+        # Maya doco indicates: len(knots) == len(control_points) + degree - 1
+        # Wikipedia indicates: len(knots) == len(control_points) + degree + 1
+        # Maya binary format does seem consistent with Maya docs. Blender and
+        # other NURBS implementations I've looked at seem consistent with
+        # Wikipedia. It's possible that Maya implicitly duplicates or otherwise
+        # calculates the 1st + last knot to account for this, but I need more data.
+
+        # Making heavy use of asserts to catch any variants I haven't seen so I can make
+        # sure they are interpreted correctly rather than risking passing garbage out.
+        # Failing an assert may not mean there is a bug, but rather a guess I want to confirm.
+        assert spans == _points - curve.degree, spans
+        assert u2 == b'\0'*5, u2 # 5 bytes messes up 32bit alignment - perhaps an empty null terminated string somewhere here?
+        assert curve.dimensions == 3, curve.dimensions # Complete guess, but maybe '4' will signify that W coords are present?
+
+        #self._dump_chunk(chunk, remaining=True)
+
+        for i in range(knots):
+            knot, = struct_read(">d")
+            pr_debug('            knot %2i: %f' % (i, knot))
+            curve.knot_vector.append(knot)
+            if i:
+                assert knot >= prev_knot
+            prev_knot = knot
+
+        points, = struct_read(">I")
+        assert points == _points
+
+        for i in range(points):
+            # Haven't come across any rational curves (i.e. with w components) yet.
+            # Guessing that the '3' in the header will be a '4' in these cases
+            # to signify 4 dimensional homogeneous coordinates, in which case
+            # the below code will need to be adjusted. However, what if it's a
+            # 2D rational curve (Blender has explicit support for 2D curves,
+            # not sure about Maya) - that would need three dimensions to store
+            # the weights, so how would it be distinguished from a 3D curve
+            # without weights? Need to see these examples to know how to adjust
+            # the below code, hence an assertion will fire if dimensions != 3.
+            x, y, z, = struct_read(">3d")
+            pr_debug('   control point %2i: %9f %9f %9f' % (i, x, y, z))
+            curve.control_points.append((x, y, z))
+
+        # Make sure we parsed the entire chunk (didn't fall short, didn't go over)
+        assert(self._get_offset() == chunk.data_offset + chunk.data_length)
+
+        self.on_set_attr(attr_name, curve, type="nurbsCurve")
+
+    def _parse_mpxdata_attribute(self, typeid):
         # TODO
         pass
 
     def _load_mtypeid_database(self, path):
-        with open(path) as f:
+        with open(path, 'rb') as f:
             line = f.readline()
             while line:
                 mtypeid = common.be_word4(line[:4])
-                typename = line[5:].strip()
+                typename = line[5:].strip().decode('ascii')
                 self.__mtypeid_to_typename[mtypeid] = typename
                 line = f.readline()

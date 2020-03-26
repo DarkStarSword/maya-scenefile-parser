@@ -40,8 +40,8 @@ def align(size, stride):
 def read_null_terminated(stream):
     result = ""
     next = stream.read(1)
-    while stream and next != '\0':
-        result += next
+    while stream and next != b'\0':
+        result += next.decode('ascii')
         next = stream.read(1)
     return result
 

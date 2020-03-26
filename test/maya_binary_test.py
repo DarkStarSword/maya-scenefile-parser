@@ -1,5 +1,9 @@
+#!/usr/bin/env python
+
 import sys
-from sansapp.maya import MayaBinaryParser
+sys.path.append('../')
+#from sansapp.maya import MayaBinaryParser
+from maya_scenefile_parser import MayaBinaryParser
 
 
 class TestMayaBinaryParser(MayaBinaryParser):
