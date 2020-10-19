@@ -2,35 +2,35 @@ import struct
 
 
 def be_word4(buf):
-    return struct.unpack(">L", buf)[0]
+    return struct.unpack('>L', buf)[0]
 
 
 def le_word4(buf):
-    return struct.unpack("<L", buf)[0]
+    return struct.unpack('<L', buf)[0]
 
 
 def be_word8(buf):
-    return struct.unpack(">Q", buf)[0]
+    return struct.unpack('>Q', buf)[0]
 
 
 def le_word8(buf):
-    return struct.unpack("<Q", buf)[0]
+    return struct.unpack('<Q', buf)[0]
 
 
 def be_read4(stream):
-    return struct.unpack(">L", stream.read(4))[0]
+    return struct.unpack('>L', stream.read(4))[0]
 
 
 def le_read4(stream):
-    return struct.unpack("<L", stream.read(4))[0]
+    return struct.unpack('<L', stream.read(4))[0]
 
 
 def be_read8(stream):
-    return struct.unpack(">Q", stream.read(8))[0]
+    return struct.unpack('>Q', stream.read(8))[0]
 
 
 def le_read8(stream):
-    return struct.unpack("<Q", stream.read(8))[0]
+    return struct.unpack('<Q', stream.read(8))[0]
 
 
 def align(size, stride):
@@ -38,21 +38,21 @@ def align(size, stride):
 
 
 def read_null_terminated(stream):
-    result = ""
+    result = b''
     next = stream.read(1)
-    while stream and next != '\0':
+    while stream and next != b'\0':
         result += next
         next = stream.read(1)
     return result
 
 
 def plug_element_count(plug):
-    lbracket = plug.rfind("[")
+    lbracket = plug.rfind(b'[')
     if lbracket != -1:
-        rbracket = plug.rfind("]")
+        rbracket = plug.rfind(b']')
         if rbracket != -1 and lbracket < rbracket:
             slicestr = plug[lbracket + 1:rbracket]
-            bounds = slicestr.split(":")
+            bounds = slicestr.split(b':')
             if len(bounds) > 1:
                 return int(bounds[1]) - int(bounds[0]) + 1
     return 1
