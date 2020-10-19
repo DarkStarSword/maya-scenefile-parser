@@ -2,7 +2,7 @@
 
 Parse Binary and Ascii Maya scene files with Python.
 
-Supports Maya 8.5-2017.
+Supports Maya 8.5-2020.
 
 **Alternatives**
 
