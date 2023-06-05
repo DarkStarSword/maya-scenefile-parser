@@ -1,16 +1,13 @@
 [build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry>=1.0.2"]
+build-backend = "poetry.masonry.api"
 
-[project]
+[tool.poetry]
 name = "maya_scenefile_parser"
 readme = "README.md"
-authors = [
-    {name = "Alon Gibli"},
-    {name = "Marcus Ottosson"},
-]
+authors = ["Alon Gibli", "Marcus Ottosson"]
 description = "Autodesk Maya Scenefile Parser"
-license = {text = "MIT"}
+license = "MIT"
 
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -21,16 +18,15 @@ classifiers = [
     "Intended Audience :: Developers",
 ]
 version = "2020"
+repository = "https://github.com/mottosso/maya-scenefile-parser"
+homepage = "https://github.com/mottosso/maya-scenefile-parser"
 
-[project.urls]
-"Homepage" = "https://github.com/mottosso/maya-scenefile-parser"
-"Bug Tracker" = "https://github.com/mottosso/maya-scenefile-parser/issues"
+keywords = ["maya", "mel", "3d", "graphics", "games", "VFX", "CG", "animation"]
 
-[tool.setuptools.packages.find]
-include = ["maya_scenefile_parser"]
-
-[tool.setuptools.package-data]
-maya_scenefile_parser = ["modules/maya/2012/typeids.dat"]
+packages = [
+    { include = "maya_scenefile_parser" },
+]
+include = ["modules/maya/2012/typeids.dat"]
 
 [tool.distutils.bdist_wheel]
 universal = true
