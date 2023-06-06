@@ -1,0 +1,32 @@
+[build-system]
+requires = ["poetry>=1.0.2"]
+build-backend = "poetry.masonry.api"
+
+[tool.poetry]
+name = "maya_scenefile_parser"
+readme = "README.md"
+authors = ["Alon Gibli", "Marcus Ottosson"]
+description = "Autodesk Maya Scenefile Parser"
+license = "MIT"
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 2",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+]
+version = "2020"
+repository = "https://github.com/mottosso/maya-scenefile-parser"
+homepage = "https://github.com/mottosso/maya-scenefile-parser"
+
+keywords = ["maya", "mel", "3d", "graphics", "games", "VFX", "CG", "animation"]
+
+packages = [
+    { include = "maya_scenefile_parser" },
+]
+include = ["modules/maya/2012/typeids.dat"]
+
+[tool.distutils.bdist_wheel]
+universal = true
